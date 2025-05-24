@@ -1,0 +1,176 @@
+.d3arg {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: white;
+    padding: 20px 20px 60px 20px;
+}
+
+.d3arg:hover .dashboard {
+    visibility: visible;
+}
+
+.d3arg .dashboard {
+    display: flex;
+    visibility: hidden;
+}
+
+.d3arg .dashboard .dashbutton {
+    position: relative;
+    font-size: 30px;
+    border: 0px;
+    background-color: white;
+    width: 30px;
+    height: 30px;
+}
+
+.d3arg .dashboard .dashbutton .tip {
+    width: 150px;
+    font-size: 12px;
+    background-color: lightgrey;
+    color: #053e4e;
+    text-align: center;
+    padding: 5px 0px;
+    position: absolute;
+    z-index: 1;
+    top: 100%;
+    left: 50%; 
+    margin-left: -60px;
+    visibility: hidden;
+}
+
+.d3arg .dashboard .dashbutton:hover .desc {
+    visibility: visible;
+}
+
+.d3arg .dashboard path {
+    fill: grey;
+}
+
+.d3arg .dashboard .dashbutton:hover path {
+    fill: #053e4e;
+}
+
+.d3arg .dashboard .activecolor:active path {
+    fill: #1eebb1;
+}
+
+.d3arg .savemethods, .d3arg .labelmethods {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.d3arg .savemethods button, .d3arg .labelmethods button {
+    background-color: lightgrey;
+    color: #053e4e;
+    font-size: 12px;
+    width: auto;
+    border: none;
+}
+
+.d3arg .savemethods button:hover, .d3arg .labelmethods button:hover {
+    color: #1eebb1;
+}
+
+.d3arg .labelmethods button.node-labels-default {
+    text-decoration: underline;
+}
+
+.d3arg .yaxis path {
+    stroke: #053e4e;
+    stroke-width: 3px;
+}
+
+.d3arg .yaxis line {
+    stroke: #053e4e;
+    stroke-width: 3px;
+}
+
+.d3arg .yaxis text {
+    fill: #053e4e;
+    stroke: 1px;
+}
+
+.d3arg .hiddennode {
+    fill: lightgrey;
+    stroke: lightgrey;
+    stroke-width: 4px;
+}
+
+.d3arg .underlink {
+    stroke: #ffffff;
+    stroke-width: 12px;
+    fill: none;
+}
+
+.d3arg .link {
+    stroke-width: 4px;
+    fill: none;
+}
+
+.d3arg .hiddenlink {
+    stroke: lightgrey;
+    stroke-width: 4px;
+    fill: none;
+}
+
+.d3arg .labels {
+    text-anchor: middle;
+}
+
+.d3arg .label {
+    fill: #053e4e;
+    font-family: Arial;
+    font-size: 12px;
+}
+
+.d3arg .label.start {
+    text-anchor: start;
+}
+
+.d3arg .label.stop {
+    text-anchor: end;
+}
+
+.d3arg .hiddenlabel {
+    fill: lightgrey;
+    font-family: Arial;
+    font-size: 12px;
+}
+
+.d3arg svg {
+    display: block;
+}
+
+.d3arg button {
+    display: block;
+    cursor: pointer;
+}
+
+.d3arg .saving {
+    display: flex;
+    flex-direction: row;
+}
+
+.d3arg .saving .message {
+    display: none;
+}
+
+.d3arg .tooltip {
+    position: absolute;
+    max-width: 500px;
+    padding: 10px;
+    background-color: white;
+    color: black;
+    text-align: center;
+    z-index: 9999;
+}
+
+.d3arg .sites text {
+    text-anchor: middle;
+}

@@ -1,0 +1,34 @@
+# backend/environment-local.yml - For YOUR local development (matches Docker)
+name: sparg_viz
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  # Scientific packages (same as Docker conda install)
+  - tskit
+  - msprime
+  - pyslim
+  - tszip
+  - numcodecs>=0.10.0,<0.12.0
+  - zarr=2.16.1
+  - numpy
+  - pandas
+  - scipy
+  - pyarrow
+  # Development-only packages
+  - jupyter
+  - matplotlib
+  - seaborn
+  - pip
+  - pip:
+    # Web packages (same as Docker pip install)
+    - fastapi==0.104.1
+    - uvicorn[standard]==0.24.0
+    - python-multipart==0.0.6
+    - python-dotenv==1.0.0
+    - celery==5.3.4
+    - redis==5.0.1
+    - psycopg2-binary==2.9.9
+    - tsdate

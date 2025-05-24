@@ -1,0 +1,18 @@
+name: sparg_viz
+channels:
+  - defaults
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.12
+  - tskit
+  - msprime
+  - pyslim
+  - tszip
+  - numpy
+  - pandas
+  - scipy
+  - pyarrow
+  - pip
+  - pip:
+      - -r requirements-web.txt

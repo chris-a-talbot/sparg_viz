@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+README.md
+.env
+.nyc_output
+coverage
+.vscode
+.DS_Store
+*.log
+backend/__pycache__/
+*.pyc
+*.db
+.git/
