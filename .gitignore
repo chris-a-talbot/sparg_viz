@@ -31,3 +31,6 @@ Thumbs.db
 
 # Other
 package-lock.json
+.gitattributes
+.cursorrules
+tskit_arg_visualizer/

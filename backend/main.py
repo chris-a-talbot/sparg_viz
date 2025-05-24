@@ -345,31 +345,45 @@ class ARGBuilder:
         
         # Continue until we have a single lineage covering the entire sequence
         generation = 0
-        max_generations = self.num_generations * 2  # Safety limit
+        max_generations = self.num_generations * 4  # More generations to allow recombination
+        recomb_events = 0
+        coal_events = 0
+        
+        print(f"  Building ARG with {self.num_samples} samples, target {self.num_trees} trees")
         
         while len(active_lineages) > 1 and generation < max_generations:
-            # Decide whether to have a coalescence or recombination event
-            if len(active_lineages) == 1 or (len(active_lineages) > 1 and np.random.random() < 0.8):
-                # Coalescence event
-                self._coalescence_event(active_lineages, lineage_intervals, current_time)
-            else:
-                # Recombination event
-                if len(active_lineages) > 1:
-                    self._recombination_event(active_lineages, lineage_intervals, current_time)
+            # Adjust probability based on how many trees we want
+            # More recombination if we want more trees
+            recomb_prob = min(0.6, 0.2 + (self.num_trees - 1) * 0.1)
             
-            current_time += np.random.exponential(0.1)
+            # Decide whether to have a coalescence or recombination event
+            if len(active_lineages) == 1:
+                break
+            elif np.random.random() < recomb_prob and len(active_lineages) > 1:
+                # Recombination event
+                if self._recombination_event(active_lineages, lineage_intervals, current_time):
+                    recomb_events += 1
+            else:
+                # Coalescence event
+                if self._coalescence_event(active_lineages, lineage_intervals, current_time):
+                    coal_events += 1
+            
+            current_time += np.random.exponential(0.05)  # Shorter time steps
             generation += 1
+        
+        print(f"  Created {coal_events} coalescence events and {recomb_events} recombination events")
         
         # If we still have multiple lineages, coalesce them all
         if len(active_lineages) > 1:
+            print(f"  Final coalescence of {len(active_lineages)} remaining lineages")
             self._final_coalescence(active_lineages, lineage_intervals, current_time)
     
     def _coalescence_event(self, active_lineages: List[int], 
                           lineage_intervals: Dict[int, List[Tuple[float, float]]], 
-                          current_time: float):
+                          current_time: float) -> bool:
         """Perform a coalescence event between two lineages."""
         if len(active_lineages) < 2:
-            return
+            return False
         
         # Choose two lineages to coalesce
         child1, child2 = np.random.choice(active_lineages, 2, replace=False)
@@ -380,7 +394,7 @@ class ARGBuilder:
         overlapping_intervals = self._find_overlapping_intervals(intervals1, intervals2)
         
         if not overlapping_intervals:
-            return  # No overlap, can't coalesce
+            return False  # No overlap, can't coalesce
         
         # Create new parent node
         parent_id = self.tables.nodes.add_row(time=current_time, flags=0)
@@ -402,13 +416,15 @@ class ARGBuilder:
         )
         del lineage_intervals[child1]
         del lineage_intervals[child2]
+        
+        return True
     
     def _recombination_event(self, active_lineages: List[int], 
                            lineage_intervals: Dict[int, List[Tuple[float, float]]], 
-                           current_time: float):
+                           current_time: float) -> bool:
         """Perform a recombination event on a lineage."""
         if not active_lineages:
-            return
+            return False
         
         # Choose a lineage to recombine
         lineage = np.random.choice(active_lineages)
@@ -416,22 +432,29 @@ class ARGBuilder:
         
         # Find a valid recombination point
         total_length = sum(right - left for left, right in intervals)
-        if total_length <= 1.0:
-            return  # Too short to recombine
+        if total_length <= 100.0:  # Much less restrictive - allow recombination on shorter segments
+            return False
         
-        # Choose a recombination point
-        target_pos = np.random.uniform(0, total_length)
+        # Choose a recombination point - avoid breakpoints too close to ends
+        min_margin = min(100.0, total_length * 0.1)
+        valid_length = total_length - 2 * min_margin
+        if valid_length <= 0:
+            return False
+            
+        target_pos = np.random.uniform(min_margin, total_length - min_margin)
         current_pos = 0
         recomb_point = None
         
         for left, right in intervals:
-            if current_pos + (right - left) > target_pos:
+            interval_length = right - left
+            if current_pos + interval_length > target_pos:
+                # Recombination point is in this interval
                 recomb_point = left + (target_pos - current_pos)
                 break
-            current_pos += (right - left)
+            current_pos += interval_length
         
-        if recomb_point is None or recomb_point <= 0 or recomb_point >= self.sequence_length:
-            return
+        if recomb_point is None:
+            return False
         
         # Split the lineage at the recombination point
         left_intervals = []
@@ -448,7 +471,7 @@ class ARGBuilder:
                 right_intervals.append((recomb_point, right))
         
         if not left_intervals or not right_intervals:
-            return  # Invalid split
+            return False  # Invalid split
         
         # Create two new lineages
         left_lineage = self.node_counter
@@ -471,6 +494,8 @@ class ARGBuilder:
         lineage_intervals[left_lineage] = left_intervals
         lineage_intervals[right_lineage] = right_intervals
         del lineage_intervals[lineage]
+        
+        return True
     
     def _final_coalescence(self, active_lineages: List[int], 
                           lineage_intervals: Dict[int, List[Tuple[float, float]]], 
