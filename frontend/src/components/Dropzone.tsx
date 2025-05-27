@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { apiConfig } from '../config/api';
+import { api } from '../lib/api';
+import { log } from '../lib/logger';
+import { FILE_TYPES } from '../config/constants';
 
 type DropzoneProps = {
   onUploadComplete?: (result: any) => void;
@@ -17,36 +19,33 @@ export default function Dropzone({ onUploadComplete, setLoading }: DropzoneProps
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: false,
-    accept: {
-      'application/octet-stream': ['.trees', '.tsz'],
-      'application/x-trees': ['.trees'],
-      'application/x-tsz': ['.tsz'],
-    },
+    accept: FILE_TYPES.ACCEPTED_FORMATS,
   });
 
   const handleRun = async () => {
     if (file) {
       setLoading(true);
-      const formData = new FormData();
-      formData.append('file', file);
-  
+      
       try {
-        const response = await fetch(`${apiConfig.baseURL}/upload-tree-sequence`, {
-          method: 'POST',
-          body: formData,
+        log.user.action('upload-start', { filename: file.name, size: file.size }, 'Dropzone');
+        const result = await api.uploadTreeSequence(file);
+        
+        log.info('File upload completed successfully', {
+          component: 'Dropzone',
+          data: { filename: file.name, result }
         });
-        if (!response.ok) {
-          throw new Error('Upload failed');
-        }
-        const result = await response.json();
-        console.log('Backend response:', result);
+        
         if (onUploadComplete) {
-          onUploadComplete(result);
+          onUploadComplete(result.data);
         }
-        // Optionally show a success message to the user here
       } catch (err) {
-        console.error('Error uploading file:', err);
-        // Optionally show an error message to the user here
+        log.error('File upload failed', {
+          component: 'Dropzone',
+          error: err instanceof Error ? err : new Error(String(err)),
+          data: { filename: file.name }
+        });
+        // Show error message to user
+        alert(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
       }

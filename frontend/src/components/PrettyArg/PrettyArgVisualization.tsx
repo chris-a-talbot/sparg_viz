@@ -187,52 +187,64 @@ export const PrettyArgVisualization = forwardRef<SVGSVGElement, PrettyArgVisuali
                 return orderedSamples;
             };
 
-            // Position nodes with fixed y coordinates based on time ranks
+            // Position nodes with fixed y coordinates and use backend X coordinates
             const initialNodes: StaticNode[] = data.data.nodes.map(node => {
                 const rank = timeToRank.get(node.time) || 0;
                 return {
                     ...node,
-                    x: node.x || width / 2,
+                    x: node.x || width / 2, // Use backend X position if provided
                     y: yScale(rank)
                 };
             });
 
-            // Apply optimal sample ordering based on shared ancestry
-            const orderedSamples = calculateSampleOrdering(initialNodes, data.data.links);
-            if (orderedSamples.length > 0) {
-                const sampleSpacing = width / (orderedSamples.length + 1);
-                orderedSamples.forEach((node, i) => {
-                    node.x = (i + 1) * sampleSpacing;
-                });
-            }
-
-            // Position non-sample nodes based on their children's average x position
+            // Create nodeMap for use throughout the visualization
             const nodeMap = new Map(initialNodes.map(n => [n.id, n]));
-            const positioned = new Set(orderedSamples.map(n => n.id));
-            
-            // Process nodes from bottom to top (samples to root)
-            for (let rank = 1; rank <= maxRank; rank++) {
-                const rankNodes = initialNodes.filter(n => timeToRank.get(n.time) === rank);
-                
-                for (const node of rankNodes) {
-                    if (positioned.has(node.id)) continue;
-                    
-                    // Find children that are already positioned
-                    const children = data.data.links
-                        .filter(link => link.source === node.id)
-                        .map(link => nodeMap.get(link.target))
-                        .filter((child): child is StaticNode => child !== undefined && positioned.has(child.id));
-                    
-                    if (children.length > 0) {
-                        // Position above the average of children
-                        node.x = children.reduce((sum, child) => sum + child.x, 0) / children.length;
-                    } else {
-                        // Default positioning if no positioned children
-                        node.x = width / 2;
-                    }
-                    
-                    positioned.add(node.id);
+
+            // If backend provided X positions, use them directly
+            const backendHasPositions = data.data.nodes.every(node => node.x !== undefined && node.x > 0);
+            console.log('Backend has X positions:', backendHasPositions);
+
+            if (!backendHasPositions) {
+                // Only apply frontend sample ordering if backend hasn't provided positions
+                const orderedSamples = calculateSampleOrdering(initialNodes, data.data.links);
+                if (orderedSamples.length > 0) {
+                    const sampleSpacing = width / (orderedSamples.length + 1);
+                    orderedSamples.forEach((node, i) => {
+                        node.x = (i + 1) * sampleSpacing;
+                    });
                 }
+                
+                // Position non-sample nodes based on their children's average x position
+                const positioned = new Set(orderedSamples.map(n => n.id));
+                
+                // Process nodes from bottom to top (samples to root)
+                for (let rank = 1; rank <= maxRank; rank++) {
+                    const rankNodes = initialNodes.filter(n => timeToRank.get(n.time) === rank);
+                    
+                    for (const node of rankNodes) {
+                        if (positioned.has(node.id)) continue;
+                        
+                        // Find children that are already positioned
+                        const children = data.data.links
+                            .filter(link => link.source === node.id)
+                            .map(link => nodeMap.get(link.target))
+                            .filter((child): child is StaticNode => child !== undefined && positioned.has(child.id));
+                        
+                        if (children.length > 0) {
+                            // Position above the average of children
+                            node.x = children.reduce((sum, child) => sum + child.x, 0) / children.length;
+                        } else {
+                            // Default positioning if no positioned children
+                            node.x = width / 2;
+                        }
+                        
+                        positioned.add(node.id);
+                    }
+                }
+                
+                console.log('Applied frontend positioning for', initialNodes.length, 'nodes');
+            } else {
+                console.log('Using backend X positions for all', initialNodes.length, 'nodes');
             }
 
             // Create background
@@ -421,58 +433,104 @@ export const PrettyArgVisualization = forwardRef<SVGSVGElement, PrettyArgVisuali
                     return `M${x1},${y1} L${x2},${y2}`;
                 }
 
-                // For orthogonal routing, consider multiple path options
+                // For orthogonal routing, ALWAYS ensure at least one turn for clarity
                 const dx = x2 - x1;
                 const dy = y2 - y1;
                 
-                // If nodes are aligned, use direct path
-                if (Math.abs(dx) < 5) {
-                    return `M${x1},${y1} L${x1},${y2} L${x2},${y2}`;
-                }
-                if (Math.abs(dy) < 5) {
-                    return `M${x1},${y1} L${x2},${y1} L${x2},${y2}`;
-                }
+                // Minimum offset to ensure visible turns even for aligned nodes
+                const minOffset = 15;
                 
                 // Check connection types for special routing rules
                 const targetIsSample = targetNode.ts_flags & 1;
                 const targetParentCount = allLinks.filter(l => l.target === targetNode.id).length;
                 const sourceChildCount = allLinks.filter(l => l.source === sourceNode.id).length;
                 
-                // Path options
-                const pathOption1 = `M${x1},${y1} L${x2},${y1} L${x2},${y2}`; // Horizontal first
-                const pathOption2 = `M${x1},${y1} L${x1},${y2} L${x2},${y2}`; // Vertical first
+                // Calculate intermediate points to ensure visible turns
+                let midX1, midY1, midX2, midY2;
                 
-                // Apply special rules for samples and single connections
-                if (targetIsSample || targetParentCount === 1) {
-                    return pathOption1; // Horizontal first, then vertical to target
+                if (Math.abs(dx) < 5) {
+                    // Nodes are vertically aligned - force a horizontal detour
+                    const detourDirection = sourceChildCount > 1 ? 1 : -1; // Vary direction based on fan-out
+                    const detourDistance = Math.max(minOffset, Math.abs(dy) * 0.2);
+                    
+                    midX1 = x1 + (detourDirection * detourDistance);
+                    midY1 = y1 + dy * 0.3; // 30% of the way down
+                    midX2 = x2 + (detourDirection * detourDistance);
+                    midY2 = y2 - dy * 0.3; // 30% of the way up from target
+                    
+                    return `M${x1},${y1} L${midX1},${midY1} L${midX2},${midY2} L${x2},${y2}`;
+                } else if (Math.abs(dy) < 5) {
+                    // Nodes are horizontally aligned - force a vertical detour
+                    const detourDistance = Math.max(minOffset, Math.abs(dx) * 0.2);
+                    
+                    midX1 = x1 + dx * 0.3;
+                    midY1 = y1 - detourDistance; // Go up first
+                    midX2 = x2 - dx * 0.3;
+                    midY2 = y2 - detourDistance;
+                    
+                    return `M${x1},${y1} L${midX1},${midY1} L${midX2},${midY2} L${x2},${y2}`;
                 }
                 
-                if (sourceChildCount === 1) {
-                    return pathOption1;
+                // For non-aligned nodes, use smart routing with guaranteed turns
+                
+                // Path options with enhanced turn clarity
+                const horizontalFirst = () => {
+                    // Add a small vertical offset at the start for better visibility
+                    const startOffset = sourceChildCount > 1 ? minOffset * 0.5 : 0;
+                    const midY = y1 + startOffset;
+                    return `M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}`;
+                };
+                
+                const verticalFirst = () => {
+                    // Add a small horizontal offset at the start for better visibility  
+                    const startOffset = sourceChildCount > 1 ? minOffset * 0.5 : 0;
+                    const midX = x1 + (dx > 0 ? startOffset : -startOffset);
+                    return `M${x1},${y1} L${midX},${y1} L${midX},${y2} L${x2},${y2}`;
+                };
+                
+                // Enhanced routing rules for clarity
+                if (targetIsSample) {
+                    // For samples, use horizontal-first with clear turns
+                    return horizontalFirst();
                 }
                 
-                // For other cases, use crossing minimization
+                if (targetParentCount > 1) {
+                    // For nodes with multiple parents (recombination), use routing that shows convergence clearly
+                    const convergenceY = y1 + dy * 0.7; // Converge closer to target
+                    return `M${x1},${y1} L${x1},${convergenceY} L${x2},${convergenceY} L${x2},${y2}`;
+                }
+                
+                if (sourceChildCount > 1) {
+                    // For nodes with multiple children, use routing that shows divergence clearly
+                    const divergenceY = y1 + dy * 0.3; // Diverge closer to source
+                    return `M${x1},${y1} L${x1},${divergenceY} L${x2},${divergenceY} L${x2},${y2}`;
+                }
+                
+                // For regular cases, use crossing minimization with guaranteed turns
+                const option1Path = horizontalFirst();
+                const option2Path = verticalFirst();
+                
                 const option1Crossings = calculatePathCrossings(
-                    [{x: x1, y: y1}, {x: x2, y: y1}, {x: x2, y: y2}], 
+                    parsePathToPoints(option1Path), 
                     allLinks.filter(l => l.id !== link.id), 
                     nodeMap
                 );
                 
                 const option2Crossings = calculatePathCrossings(
-                    [{x: x1, y: y1}, {x: x1, y: y2}, {x: x2, y: y2}], 
+                    parsePathToPoints(option2Path), 
                     allLinks.filter(l => l.id !== link.id), 
                     nodeMap
                 );
                 
                 // Choose path with fewer crossings
                 if (option1Crossings < option2Crossings) {
-                    return pathOption1;
+                    return option1Path;
                 } else if (option2Crossings < option1Crossings) {
-                    return pathOption2;
+                    return option2Path;
                 } else {
-                    // If equal crossings, prefer based on direction
+                    // If equal crossings, prefer based on direction and connection type
                     const isUpward = y2 < y1;
-                    return isUpward ? pathOption1 : pathOption2;
+                    return isUpward ? horizontalFirst() : verticalFirst();
                 }
             };
 

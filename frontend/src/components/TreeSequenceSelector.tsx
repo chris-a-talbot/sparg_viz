@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTreeSequence } from '../context/TreeSequenceContext';
+import { api } from '../lib/api';
+import { log } from '../lib/logger';
 
 interface TreeSequenceInfo {
   filename: string;
@@ -28,14 +30,19 @@ export default function TreeSequenceSelector({ onSelect, className = '' }: TreeS
   const fetchAvailableTreeSequences = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/uploaded-files');
-      if (!response.ok) {
-        throw new Error('Failed to fetch available tree sequences');
-      }
-      const data = await response.json();
+      log.data.processing('fetch-available-tree-sequences', 'TreeSequenceSelector');
+      const response = await api.getUploadedFiles();
+      const data = response.data as { uploaded_tree_sequences: string[] };
       setAvailableTreeSequences(data.uploaded_tree_sequences || []);
+      log.info(`Loaded ${data.uploaded_tree_sequences?.length || 0} tree sequences`, {
+        component: 'TreeSequenceSelector',
+        action: 'fetch-available'
+      });
     } catch (error) {
-      console.error('Error fetching available tree sequences:', error);
+      log.error('Failed to fetch available tree sequences', {
+        component: 'TreeSequenceSelector',
+        error: error instanceof Error ? error : new Error(String(error))
+      });
       setAvailableTreeSequences([]);
     } finally {
       setLoading(false);
@@ -44,12 +51,14 @@ export default function TreeSequenceSelector({ onSelect, className = '' }: TreeS
 
   const getTreeSequenceInfo = async (filename: string): Promise<TreeSequenceInfo | null> => {
     try {
-      // Use the dedicated metadata endpoint for better performance
-      const response = await fetch(`http://localhost:8000/tree-sequence-metadata/${encodeURIComponent(filename)}`);
-      if (!response.ok) {
-        throw new Error(`Failed to get metadata for ${filename}`);
-      }
-      const data = await response.json();
+      log.data.processing('fetch-metadata', 'TreeSequenceSelector', undefined, undefined);
+      const response = await api.getTreeSequenceMetadata(filename);
+      const data = response.data as TreeSequenceInfo;
+      
+      log.debug(`Retrieved metadata for ${filename}`, {
+        component: 'TreeSequenceSelector',
+        data: { filename, num_samples: data.num_samples, num_nodes: data.num_nodes }
+      });
       
       return {
         filename: data.filename,
@@ -63,7 +72,11 @@ export default function TreeSequenceSelector({ onSelect, className = '' }: TreeS
         spatial_status: data.spatial_status
       };
     } catch (error) {
-      console.error(`Error getting metadata for ${filename}:`, error);
+      log.error(`Failed to get metadata for ${filename}`, {
+        component: 'TreeSequenceSelector',
+        error: error instanceof Error ? error : new Error(String(error)),
+        data: { filename }
+      });
       return null;
     }
   };
@@ -104,16 +117,13 @@ export default function TreeSequenceSelector({ onSelect, className = '' }: TreeS
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/tree-sequence/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
+      log.user.action('delete-tree-sequence', { filename }, 'TreeSequenceSelector');
+      const response = await api.deleteTreeSequence(filename);
+      
+      log.info(`Successfully deleted tree sequence: ${filename}`, {
+        component: 'TreeSequenceSelector',
+        data: { filename }
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete ${filename}`);
-      }
-
-      const result = await response.json();
-      console.log('Delete result:', result);
 
       // Remove from local state
       setAvailableTreeSequences(prev => prev.filter(f => f !== filename));
@@ -130,7 +140,11 @@ export default function TreeSequenceSelector({ onSelect, className = '' }: TreeS
 
       alert(`Successfully deleted "${filename}"`);
     } catch (error) {
-      console.error('Error deleting tree sequence:', error);
+      log.error('Failed to delete tree sequence', {
+        component: 'TreeSequenceSelector',
+        error: error instanceof Error ? error : new Error(String(error)),
+        data: { filename }
+      });
       alert(`Failed to delete tree sequence: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };

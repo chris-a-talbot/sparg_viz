@@ -3,9 +3,11 @@ import { useState, useEffect } from 'react';
 import { useTreeSequence } from '../context/TreeSequenceContext';
 import StatusIcon from './StatusIcon';
 import TreeSequenceSelector from './TreeSequenceSelector';
+import { api } from '../lib/api';
+import { log } from '../lib/logger';
+import { SAMPLE_LIMITS } from '../config/constants';
 
 export default function ResultPage() {
-  console.log('ResultPage rendered');
   const navigate = useNavigate();
   const { treeSequence: data, maxSamples, setMaxSamples, setTreeSequence } = useTreeSequence();
   const [totalSamples, setTotalSamples] = useState<number | null>(null);
@@ -45,46 +47,39 @@ export default function ResultPage() {
     setIsInferringLocationsFast(true);
 
     try {
-      console.log('Starting fast location inference for file:', data.filename);
+      log.user.action('fast-location-inference-start', { filename: data.filename }, 'ResultPage');
 
-      const response = await fetch('http://localhost:8000/infer-locations-fast', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: data.filename,
-          weight_span: true,
-          weight_branch_length: true,
-        }),
+      const result = await api.inferLocationsFast({
+        filename: data.filename,
+        weight_span: true,
+        weight_branch_length: true,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(
-          `HTTP error! status: ${response.status}\n` +
-          `Details: ${errorData?.detail || 'No details available'}`
-        );
-      }
-
-      const result = await response.json();
-      console.log('Fast location inference completed:', result);
+      log.info('Fast location inference completed successfully', {
+        component: 'ResultPage',
+        data: { filename: data.filename, result: result.data }
+      });
 
       // Update the tree sequence context with the new filename and spatial info
+      const resultData = result.data as any;
       const updatedData = {
         ...data,
-        filename: result.new_filename,
-        has_sample_spatial: result.has_sample_spatial,
-        has_all_spatial: result.has_all_spatial,
-        spatial_status: result.spatial_status,
+        filename: resultData.new_filename,
+        has_sample_spatial: resultData.has_sample_spatial,
+        has_all_spatial: resultData.has_all_spatial,
+        spatial_status: resultData.spatial_status,
       };
 
       setTreeSequence(updatedData);
 
-      alert(`Fast location inference completed successfully!\nInferred locations for ${result.num_inferred_locations} nodes.\nNew file: ${result.new_filename}`);
+      alert(`Fast location inference completed successfully!\nInferred locations for ${resultData.num_inferred_locations} nodes.\nNew file: ${resultData.new_filename}`);
 
     } catch (error) {
-      console.error('Error during fast location inference:', error);
+      log.error('Fast location inference failed', {
+        component: 'ResultPage',
+        error: error instanceof Error ? error : new Error(String(error)),
+        data: { filename: data.filename }
+      });
       alert(`Fast location inference failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsInferringLocationsFast(false);
@@ -92,7 +87,7 @@ export default function ResultPage() {
   };
 
   const handleTreeSequenceSelect = (treeSequence: any) => {
-    console.log('Switching to tree sequence:', treeSequence);
+    log.user.action('switch-tree-sequence', { treeSequence }, 'ResultPage');
     setTreeSequence(treeSequence);
     setShowTreeSequenceSelector(false);
   };
@@ -135,10 +130,14 @@ export default function ResultPage() {
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                console.log('Download button clicked for file:', data.filename);
-              } catch (error) {
-                console.error('Error downloading file:', error);
-              }
+                log.user.action('download-tree-sequence', { filename: data.filename }, 'ResultPage');
+                              } catch (error) {
+                  log.error('Download failed', {
+                    component: 'ResultPage',
+                    error: error instanceof Error ? error : new Error(String(error)),
+                    data: { filename: data.filename }
+                  });
+                }
             }}>Download .tsz</button>
           </div>
         </div>
@@ -174,7 +173,7 @@ export default function ResultPage() {
           <button
             className={`bg-sp-dark-blue text-sp-white font-medium px-4 py-2 rounded-lg text-base ${!inferTimesEnabled && 'opacity-50 cursor-not-allowed'}`}
             disabled={!inferTimesEnabled}
-            onClick={() => console.log('Infer times button clicked')}
+            onClick={() => log.user.action('infer-times-clicked', { filename: data.filename }, 'ResultPage')}
           >
             Infer times (tsdate)
           </button>
@@ -250,7 +249,7 @@ export default function ResultPage() {
                 type="range"
                 id="sample-slider"
                 min="2"
-                max={totalSamples || 25}
+                max={totalSamples || SAMPLE_LIMITS.DEFAULT_MAX_SAMPLES}
                 value={Math.max(maxSamples, 2)}
                 onChange={(e) => setMaxSamples(parseInt(e.target.value))}
                 className="flex-1 h-2 bg-sp-very-dark-blue rounded-lg appearance-none cursor-pointer accent-sp-pale-green"
@@ -266,7 +265,7 @@ export default function ResultPage() {
                     }
                   }}
                   min="2"
-                  max={totalSamples || 25}
+                  max={totalSamples || SAMPLE_LIMITS.DEFAULT_MAX_SAMPLES}
                   className="w-20 bg-sp-very-dark-blue border border-sp-dark-blue rounded px-2 py-1 text-sm text-sp-white focus:outline-none focus:ring-2 focus:ring-sp-pale-green"
                 />
                 <span className="text-sm font-mono text-right">
@@ -278,7 +277,7 @@ export default function ResultPage() {
               <p className="text-xs text-sp-white">
                 Adjust this before visualizing to control the number of samples shown in the ARG (minimum: 2)
               </p>
-              {totalSamples && totalSamples > 25 && (
+              {totalSamples && totalSamples > SAMPLE_LIMITS.WARNING_THRESHOLD && (
                 <p className="text-xs text-sp-white">
                   Note: Large sample numbers may affect visualization performance
                 </p>

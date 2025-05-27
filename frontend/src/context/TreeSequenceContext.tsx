@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
+import { SAMPLE_LIMITS } from '../config/constants';
 
 interface TreeSequenceData {
   filename: string;
@@ -30,14 +31,14 @@ const TreeSequenceContext = createContext<TreeSequenceContextType | undefined>(u
 
 export function TreeSequenceProvider({ children }: { children: ReactNode }) {
   const [treeSequence, setTreeSequence] = useState<TreeSequenceData | null>(null);
-  const [maxSamples, setMaxSamples] = useState(25);
+  const [maxSamples, setMaxSamples] = useState<number>(SAMPLE_LIMITS.DEFAULT_MAX_SAMPLES);
 
   // Custom setTreeSequence that also updates maxSamples appropriately
   const setTreeSequenceWithSamples = (data: TreeSequenceData | null) => {
     setTreeSequence(data);
     if (data?.num_samples) {
-      // Set maxSamples to min(25, actual_samples), ensuring we don't exceed available samples
-      const newMaxSamples = Math.min(25, data.num_samples);
+      // Set maxSamples to min(DEFAULT_MAX_SAMPLES, actual_samples), ensuring we don't exceed available samples
+      const newMaxSamples = Math.min(SAMPLE_LIMITS.DEFAULT_MAX_SAMPLES, data.num_samples);
       setMaxSamples(newMaxSamples);
     }
   };
@@ -45,12 +46,12 @@ export function TreeSequenceProvider({ children }: { children: ReactNode }) {
   // Custom setMaxSamples that respects the current tree sequence sample limit
   const setMaxSamplesWithLimit = (value: number) => {
     if (treeSequence?.num_samples) {
-      // Ensure value is between 2 and the actual number of samples
-      const clampedValue = Math.max(2, Math.min(value, treeSequence.num_samples));
+      // Ensure value is between MIN_SAMPLES and the actual number of samples
+      const clampedValue = Math.max(SAMPLE_LIMITS.MIN_SAMPLES, Math.min(value, treeSequence.num_samples));
       setMaxSamples(clampedValue);
     } else {
-      // If no tree sequence loaded, just use min(value, 25)
-      setMaxSamples(Math.min(value, 25));
+      // If no tree sequence loaded, just use min(value, DEFAULT_MAX_SAMPLES)
+      setMaxSamples(Math.min(value, SAMPLE_LIMITS.DEFAULT_MAX_SAMPLES));
     }
   };
 
